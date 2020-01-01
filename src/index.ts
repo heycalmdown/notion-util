@@ -2,10 +2,12 @@ import { NotionAgent } from 'notionapi-agent';
 import * as url from 'url';
 import * as _ from 'lodash';
 import { v4 } from 'uuid';
+import Telegraf from 'telegraf';
 
-const { NOTION_TOKEN } = process.env;
+const { NOTION_TOKEN, TELEGRAM_TOKEN } = process.env;
 
-const agent = new NotionAgent({
+const telegram = new Telegraf(TELEGRAM_TOKEN);
+const notion = new NotionAgent({
   token: NOTION_TOKEN,
   timezone: 'Asia/Seoul'
 });
@@ -62,7 +64,7 @@ async function findCollectionIds() {
   if (CACHE.COLLECTION_ID && CACHE.COLLECTION_VIEW_ID) return [CACHE.COLLECTION_ID, CACHE.COLLECTION_VIEW_ID];
   const tempUrl = 'https://www.notion.so/kekefam/4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e';
   const id = getPageIDFromNotionPageURL(tempUrl);
-  const page = await agent.loadPageChunk(id)
+  const page = await notion.loadPageChunk(id)
 
   const collectionId = _.keys(page.data.recordMap.collection)[0];
   const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
@@ -72,7 +74,7 @@ async function findCollectionIds() {
 async function findNotesIds() {
   const tempUrl = 'https://www.notion.so/kekefam/80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312';
   const id = getPageIDFromNotionPageURL(tempUrl);
-  const page = await agent.loadPageChunk(id)
+  const page = await notion.loadPageChunk(id)
 
   const collectionId = _.keys(page.data.recordMap.collection)[0];
   const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
@@ -85,7 +87,7 @@ async function queryBooks(searchTerm: string) {
   console.log(searchTerm);
 
   console.time('queryCollection');
-  const response = await agent.queryCollection(collectionId, collectionViewId, []);
+  const response = await notion.queryCollection(collectionId, collectionViewId, []);
   console.timeEnd('queryCollection');
 
   const { block, collection } = response.data.recordMap;
@@ -111,7 +113,7 @@ async function updateReadAt(id: string) {
 
   const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
 
-  await agent.submitTransaction([{
+  await notion.submitTransaction([{
     id,
     table: 'block',
     path: ['properties', 'fz`,'],
@@ -138,7 +140,7 @@ async function createNewDay(pageTitle: string) {
     created_time: +new Date()
   };
 
-  const result = await agent.submitTransaction([{
+  const result = await notion.submitTransaction([{
     id,
     table: 'block',
     path: [],
@@ -164,7 +166,7 @@ async function addNewMemo(pageId: string, text: string) {
     created_time: +new Date()
   };
 
-  const result = await agent.submitTransaction([{
+  const result = await notion.submitTransaction([{
     id,
     table: 'block',
     path: [],
@@ -178,6 +180,12 @@ async function addNewMemo(pageId: string, text: string) {
     args: {
       id
     } as any
+  }, {
+    id: pageId,
+    table: 'block',
+    path: ['last_edited_time'],
+    command: 'set',
+    args: +new Date()
   }]);
 
   console.log(result);
@@ -186,7 +194,7 @@ async function addNewMemo(pageId: string, text: string) {
 async function getDailySeedBed() {
   const [collectionId, collectionViewId] = await queryNotes();
   console.time('queryCollection');
-  const response = await agent.queryCollection(collectionId, collectionViewId, []);
+  const response = await notion.queryCollection(collectionId, collectionViewId, []);
   console.timeEnd('queryCollection');
 
   const { block } = response.data.recordMap;
@@ -225,21 +233,21 @@ async function memo(text: string) {
   console.timeEnd('addNewMemo');
 }
 
-async function main() {
-  const [command, ...args] = process.argv.slice(2);
-  if (command === 'bu') {
-    const [searchTerm] = args;
-    const results = await queryBooks(searchTerm);
-    console.log(results);
-    if (results.length !== 1) {
-      console.log('not exact match');
-      return;
-    }
+telegram.start((ctx) => ctx.reply('Welcome'));
+telegram.help((ctx) => ctx.reply('Send me a sticker'));
+telegram.command('book', async ctx => {
+  const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+  await ctx.reply('wait a sec');
+  const results = await queryBooks(searchTerm);
+  if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
+  if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
 
-    await updateReadAt(results[0][0]);
-  } else if (command === 'dn') {
-    await memo(args.join(' '));
-  }
-}
+  await updateReadAt(results[0][0]);
+  await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
+});
+telegram.command('memo', async ctx => {
+  await memo(ctx.update.message.text.split(' ').slice(1).join(' '));
+  await ctx.reply('메모 추가 완료');
+});
 
-main();
+telegram.launch();
