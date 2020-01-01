@@ -60,9 +60,11 @@ const CACHE = {
   COLLECTION_VIEW_ID: '59575ce5-af82-4944-a6bc-7bd95a14704e'
 };
 
+const NOTION_URL = 'https://www.notion.so/kekefam/';
+
 async function findCollectionIds() {
   if (CACHE.COLLECTION_ID && CACHE.COLLECTION_VIEW_ID) return [CACHE.COLLECTION_ID, CACHE.COLLECTION_VIEW_ID];
-  const tempUrl = 'https://www.notion.so/kekefam/4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e';
+  const tempUrl = NOTION_URL + '4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e';
   const id = getPageIDFromNotionPageURL(tempUrl);
   const page = await notion.loadPageChunk(id)
 
@@ -72,7 +74,7 @@ async function findCollectionIds() {
 }
 
 async function findNotesIds() {
-  const tempUrl = 'https://www.notion.so/kekefam/80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312';
+  const tempUrl = NOTION_URL + '80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312';
   const id = getPageIDFromNotionPageURL(tempUrl);
   const page = await notion.loadPageChunk(id)
 
@@ -201,7 +203,11 @@ async function getDailySeedBed() {
   return block;
 }
 
-async function getToday(today: string) {
+const dailyIds = {};
+
+async function getTodaysId(today: string) {
+  if (dailyIds[today]) return dailyIds[today];
+
   console.time('getDailySeedBed');
   const block = await getDailySeedBed();
   console.timeEnd('getDailySeedBed');
@@ -209,28 +215,33 @@ async function getToday(today: string) {
   const blocks = _.values(block);
   const pages = blocks.filter(b => b.value.type === 'page');
   const results = pages.filter(p => p.value.properties.title[0][0] === today);
-  return results[0];
+  if (results[0]) {
+    const id = results[0].value.id;
+    dailyIds[today] = id;
+    return id;
+  }
 }
 
-async function ensureToday() {
+async function ensureTodaysId() {
   const now = new Date();
   const timezoneShift = new Date(+now + 9 * 60 * 60 * 1000);
 
   const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
 
-  const result = await getToday(todayYYYYMMDD);
-  if (result) return result;
+  const id = await getTodaysId(todayYYYYMMDD);
+  if (id) return id;
 
   await createNewDay(todayYYYYMMDD);
 
-  return getToday(todayYYYYMMDD);
+  return getTodaysId(todayYYYYMMDD);
 }
 
 async function memo(text: string) {
-  const today = await ensureToday();
+  const todaysId = await ensureTodaysId();
   console.time('addNewMemo');
-  await addNewMemo(today.value.id, text);
+  await addNewMemo(todaysId, text);
   console.timeEnd('addNewMemo');
+  return todaysId;
 }
 
 telegram.start((ctx) => ctx.reply('Welcome'));
@@ -245,9 +256,11 @@ telegram.command('book', async ctx => {
   await updateReadAt(results[0][0]);
   await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
 });
-telegram.command('memo', async ctx => {
-  await memo(ctx.update.message.text.split(' ').slice(1).join(' '));
-  await ctx.reply('메모 추가 완료');
+
+telegram.on('text', async ctx => {
+  const today = await memo(ctx.update.message.text);
+  const uri = today.replace(/-/g, '');
+  await ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
 });
 
 telegram.launch();
