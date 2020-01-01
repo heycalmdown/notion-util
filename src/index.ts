@@ -244,9 +244,24 @@ async function memo(text: string) {
   return todaysId;
 }
 
+function blockIdToNotionUri(id: string) {
+  return NOTION_URL + id.replace(/-/g, '');
+}
+
 telegram.start((ctx) => ctx.reply('Welcome'));
 telegram.help((ctx) => ctx.reply('Send me a sticker'));
 telegram.command('book', async ctx => {
+  const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+  await ctx.reply('wait a sec');
+  const results = await queryBooks(searchTerm);
+  if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
+
+  return ctx.reply(results.map(r => {
+    return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
+  }).join('\n'), { parse_mode: 'Markdown' });
+});
+
+telegram.command('read', async ctx => {
   const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
   await ctx.reply('wait a sec');
   const results = await queryBooks(searchTerm);
