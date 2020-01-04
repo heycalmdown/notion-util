@@ -4,9 +4,25 @@ import * as _ from 'lodash';
 import { v4 } from 'uuid';
 import Telegraf from 'telegraf';
 
-const { NOTION_TOKEN, TELEGRAM_TOKEN } = process.env;
+const CONFIGS: any = {};
+CONFIGS['beta'] = {
+  token_env: 'TELEGRAM_BETA_TOKEN',
+  launch_opts: {}
+};
+CONFIGS['bot'] = {
+  token_env: 'TELEGRAM_TOKEN',
+  launch_opts: {
+    webhook: {
+      hookPath: '/secret-path',
+      port: parseInt(process.env.PORT!, 10) || 8080
+    }
+  }
+};
 
-const telegram = new Telegraf(TELEGRAM_TOKEN);
+const CONFIG = CONFIGS[process.env.CONFIG || 'beta'];
+
+const { NOTION_TOKEN } = process.env;
+
 const notion = new NotionAgent({
   token: NOTION_TOKEN,
   timezone: 'Asia/Seoul'
@@ -248,34 +264,40 @@ function blockIdToNotionUri(id: string) {
   return NOTION_URL + id.replace(/-/g, '');
 }
 
-telegram.start((ctx) => ctx.reply('Welcome'));
-telegram.help((ctx) => ctx.reply('Send me a sticker'));
-telegram.command('book', async ctx => {
-  const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
-  await ctx.reply('wait a sec');
-  const results = await queryBooks(searchTerm);
-  if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
+async function main() {
+  const telegram = new Telegraf(process.env[CONFIG.token_env]);
 
-  return ctx.reply(results.map(r => {
-    return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
-  }).join('\n'), { parse_mode: 'Markdown' });
-});
+  telegram.start((ctx) => ctx.reply('Welcome'));
+  telegram.help((ctx) => ctx.reply('Send me a sticker'));
+  telegram.command('book', async ctx => {
+    const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+    await ctx.reply('wait a sec');
+    const results = await queryBooks(searchTerm);
+    if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
 
-telegram.command('read', async ctx => {
-  const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
-  await ctx.reply('wait a sec');
-  const results = await queryBooks(searchTerm);
-  if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
-  if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
+    return ctx.reply(results.map(r => {
+      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
+    }).join('\n'), { parse_mode: 'Markdown' });
+  });
 
-  await updateReadAt(results[0][0]);
-  await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
-});
+  telegram.command('read', async ctx => {
+    const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+    await ctx.reply('wait a sec');
+    const results = await queryBooks(searchTerm);
+    if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
+    if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
 
-telegram.on('text', async ctx => {
-  const today = await memo(ctx.update.message.text);
-  const uri = today.replace(/-/g, '');
-  await ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
-});
+    await updateReadAt(results[0][0]);
+    await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
+  });
 
-telegram.launch();
+  telegram.on('text', async ctx => {
+    const today = await memo(ctx.update.message.text);
+    const uri = today.replace(/-/g, '');
+    await ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
+  });
+
+  await telegram.launch(CONFIG.launch_opts);
+}
+
+main();
