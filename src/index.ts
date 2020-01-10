@@ -86,10 +86,25 @@ function getPageIDFromNotionPageURL(str: string) {
 
 const CACHE = {
   COLLECTION_ID: 'e6503e49-274b-468d-9038-681263f9b659',
-  COLLECTION_VIEW_ID: '59575ce5-af82-4944-a6bc-7bd95a14704e'
+  COLLECTION_VIEW_ID: '59575ce5-af82-4944-a6bc-7bd95a14704e',
+  DRAFT: {
+    COLLECTION_ID: '02c93613-79e4-4964-9d28-59dbf5c3e3e8',
+    COLLECTION_VIEW_ID: '4d82e586-6a4c-426f-a788-b1b72b46dff6'
+  }
 };
 
 const NOTION_URL = 'https://www.notion.so/kekefam/';
+
+async function findDraftsIds() {
+  if (CACHE.DRAFT) return [CACHE.DRAFT.COLLECTION_ID, CACHE.DRAFT.COLLECTION_VIEW_ID];
+  const tempUrl = NOTION_URL + '0131e73ca2b147cc802692d60fd4a56d?v=4d82e5866a4c426fa788b1b72b46dff6';
+  const id = getPageIDFromNotionPageURL(tempUrl);
+  const page = await notion.loadPageChunk(id)
+
+  const collectionId = _.keys(page.data.recordMap.collection)[0];
+  const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
+  return [collectionId, collectionViewId];
+}
 
 async function findCollectionIds() {
   if (CACHE.COLLECTION_ID && CACHE.COLLECTION_VIEW_ID) return [CACHE.COLLECTION_ID, CACHE.COLLECTION_VIEW_ID];
@@ -129,8 +144,30 @@ async function queryBooks(searchTerm: string) {
   console.log(keyByProperty);
 
   const blocks = _.values(block);
-  const pages = blocks.filter(b => b.value.type === 'page');
+  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
   const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm)).slice(-5);
+  return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
+}
+
+async function queryDrafts(searchTerm: string) {
+  const [collectionId, collectionViewId] = await findDraftsIds();
+
+  console.log(searchTerm);
+
+  console.time('queryCollection');
+  const response = await notion.queryCollection(collectionId, collectionViewId, []);
+  console.timeEnd('queryCollection');
+
+  const { block, collection } = response.data.recordMap;
+  const collections = _.values(collection);
+  const firstCollection = collections[0].value;
+  const schema = firstCollection.schema;
+  const keyByProperty = _.transform(schema, (acc, v, k) => acc[v.name] = k, {});
+  console.log(keyByProperty);
+
+  const blocks = _.values(block);
+  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
+  const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm));
   return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
 }
 
@@ -302,6 +339,17 @@ async function main() {
 
     await updateReadAt(results[0][0]);
     await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
+  });
+
+  telegram.command('draft', async ctx => {
+    const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+    await ctx.reply('wait a sec');
+
+    const results = await queryDrafts(searchTerm);
+    if (results.length === 0) return ctx.reply('그런 글감 없음: ' + searchTerm);
+    return ctx.reply(results.map(r => {
+      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
+    }).join('\n'), { parse_mode: 'Markdown' });
   });
 
   telegram.on('text', async ctx => {
