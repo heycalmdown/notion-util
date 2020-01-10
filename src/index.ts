@@ -84,37 +84,26 @@ function getPageIDFromNotionPageURL(str: string) {
   }
 }
 
-const CACHE = {
-  COLLECTION_ID: 'e6503e49-274b-468d-9038-681263f9b659',
-  COLLECTION_VIEW_ID: '59575ce5-af82-4944-a6bc-7bd95a14704e',
-  DRAFT: {
-    COLLECTION_ID: '02c93613-79e4-4964-9d28-59dbf5c3e3e8',
-    COLLECTION_VIEW_ID: '4d82e586-6a4c-426f-a788-b1b72b46dff6'
-  }
-};
-
 const NOTION_URL = 'https://www.notion.so/kekefam/';
 
-async function findDraftsIds() {
-  if (CACHE.DRAFT) return [CACHE.DRAFT.COLLECTION_ID, CACHE.DRAFT.COLLECTION_VIEW_ID];
-  const tempUrl = NOTION_URL + '0131e73ca2b147cc802692d60fd4a56d?v=4d82e5866a4c426fa788b1b72b46dff6';
+const URIS = {
+  BOOK: NOTION_URL + '4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e',
+  DRAFT: NOTION_URL + '0131e73ca2b147cc802692d60fd4a56d?v=4d82e5866a4c426fa788b1b72b46dff6',
+  NOTE: NOTION_URL + '80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312'
+};
+
+const CACHE: {[key: string]: { COLLECTION_ID: string; COLLECTION_VIEW_ID: string }} = {};
+
+async function findCollectionIds(type: string) {
+  if (CACHE[type]) return [CACHE[type].COLLECTION_ID, CACHE[type].COLLECTION_VIEW_ID];
+  const tempUrl = URIS[type];
   const id = getPageIDFromNotionPageURL(tempUrl);
   const page = await notion.loadPageChunk(id)
 
-  const collectionId = _.keys(page.data.recordMap.collection)[0];
-  const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
-  return [collectionId, collectionViewId];
-}
-
-async function findCollectionIds() {
-  if (CACHE.COLLECTION_ID && CACHE.COLLECTION_VIEW_ID) return [CACHE.COLLECTION_ID, CACHE.COLLECTION_VIEW_ID];
-  const tempUrl = NOTION_URL + '4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e';
-  const id = getPageIDFromNotionPageURL(tempUrl);
-  const page = await notion.loadPageChunk(id)
-
-  const collectionId = _.keys(page.data.recordMap.collection)[0];
-  const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
-  return [collectionId, collectionViewId];
+  const COLLECTION_ID = _.keys(page.data.recordMap.collection)[0];
+  const COLLECTION_VIEW_ID = _.keys(page.data.recordMap.collection_view)[0];
+  CACHE[type] = { COLLECTION_ID, COLLECTION_VIEW_ID };
+  return [COLLECTION_ID, COLLECTION_VIEW_ID];
 }
 
 async function findNotesIds() {
@@ -128,7 +117,7 @@ async function findNotesIds() {
 }
 
 async function queryBooks(searchTerm: string) {
-  const [collectionId, collectionViewId] = await findCollectionIds();
+  const [collectionId, collectionViewId] = await findCollectionIds('BOOK');
 
   console.log(searchTerm);
 
@@ -150,7 +139,7 @@ async function queryBooks(searchTerm: string) {
 }
 
 async function queryDrafts(searchTerm: string) {
-  const [collectionId, collectionViewId] = await findDraftsIds();
+  const [collectionId, collectionViewId] = await findCollectionIds('DRAFT');
 
   console.log(searchTerm);
 
@@ -169,10 +158,6 @@ async function queryDrafts(searchTerm: string) {
   const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
   const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm));
   return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
-}
-
-async function queryNotes() {
-  return findNotesIds();
 }
 
 async function updateReadAt(id: string) {
@@ -260,7 +245,7 @@ async function addNewMemo(pageId: string, text: string) {
 }
 
 async function getDailySeedBed() {
-  const [collectionId, collectionViewId] = await queryNotes();
+  const [collectionId, collectionViewId] = await findCollectionIds('NOTE');
   console.time('queryCollection');
   const response = await notion.queryCollection(collectionId, collectionViewId, []);
   console.timeEnd('queryCollection');
