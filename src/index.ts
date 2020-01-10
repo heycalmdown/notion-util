@@ -89,7 +89,8 @@ const NOTION_URL = 'https://www.notion.so/kekefam/';
 const URIS = {
   BOOK: NOTION_URL + '4044898e951546df9fadbbba4d98c10f?v=59575ce5af824944a6bc7bd95a14704e',
   DRAFT: NOTION_URL + '0131e73ca2b147cc802692d60fd4a56d?v=4d82e5866a4c426fa788b1b72b46dff6',
-  NOTE: NOTION_URL + '80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312'
+  NOTE: NOTION_URL + '80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312',
+  PRM: NOTION_URL + '6a3eb7d328bc4e328a9babb598d44d0e?v=6415bd5b087143808dcc7d16a96710ee'
 };
 
 const CACHE: {[key: string]: { COLLECTION_ID: string; COLLECTION_VIEW_ID: string }} = {};
@@ -104,16 +105,6 @@ async function findCollectionIds(type: string) {
   const COLLECTION_VIEW_ID = _.keys(page.data.recordMap.collection_view)[0];
   CACHE[type] = { COLLECTION_ID, COLLECTION_VIEW_ID };
   return [COLLECTION_ID, COLLECTION_VIEW_ID];
-}
-
-async function findNotesIds() {
-  const tempUrl = NOTION_URL + '80f1b4ba615949faa9625bc42c5fb531?v=c1d00e9c432347c189b0055c24722312';
-  const id = getPageIDFromNotionPageURL(tempUrl);
-  const page = await notion.loadPageChunk(id)
-
-  const collectionId = _.keys(page.data.recordMap.collection)[0];
-  const collectionViewId = _.keys(page.data.recordMap.collection_view)[0];
-  return [collectionId, collectionViewId];
 }
 
 async function queryBooks(searchTerm: string) {
@@ -140,6 +131,28 @@ async function queryBooks(searchTerm: string) {
 
 async function queryDrafts(searchTerm: string) {
   const [collectionId, collectionViewId] = await findCollectionIds('DRAFT');
+
+  console.log(searchTerm);
+
+  console.time('queryCollection');
+  const response = await notion.queryCollection(collectionId, collectionViewId, []);
+  console.timeEnd('queryCollection');
+
+  const { block, collection } = response.data.recordMap;
+  const collections = _.values(collection);
+  const firstCollection = collections[0].value;
+  const schema = firstCollection.schema;
+  const keyByProperty = _.transform(schema, (acc, v, k) => acc[v.name] = k, {});
+  console.log(keyByProperty);
+
+  const blocks = _.values(block);
+  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
+  const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm));
+  return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
+}
+
+async function queryPeople(searchTerm: string) {
+  const [collectionId, collectionViewId] = await findCollectionIds('PRM');
 
   console.log(searchTerm);
 
@@ -332,6 +345,17 @@ async function main() {
 
     const results = await queryDrafts(searchTerm);
     if (results.length === 0) return ctx.reply('그런 글감 없음: ' + searchTerm);
+    return ctx.reply(results.map(r => {
+      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
+    }).join('\n'), { parse_mode: 'Markdown' });
+  });
+
+  telegram.command('people', async ctx => {
+    const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+    await ctx.reply('wait a sec');
+
+    const results = await queryPeople(searchTerm);
+    if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
     return ctx.reply(results.map(r => {
       return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
     }).join('\n'), { parse_mode: 'Markdown' });
