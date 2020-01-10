@@ -307,7 +307,7 @@ async function main() {
     if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
 
     await updateReadAt(results[0][0]);
-    await ctx.reply('다음 책의 읽은 시간 업데이트 했습니다: ' + results[0][1]);
+    await ctx.reply(`[${results[0][1]}](${blockIdToNotionUri(results[0][0])}) 읽은 시간 업데이트 했습니다`, { parse_mode: 'Markdown' });
   });
 
   telegram.command('draft', async ctx => {
@@ -340,7 +340,7 @@ async function main() {
     if (results.length > 1) return ctx.reply('다음 중 누구인가요? ' + results.map(r => r[1]).join(', '));
 
     await updateMetAt(results[0][0]);
-    await ctx.reply(`${results[0][1]}님과 만난 시간을 업데이트 했습니다`);
+    await ctx.reply(`[${results[0][1]}](${blockIdToNotionUri(results[0][0])})님과 만난 시간을 업데이트 했습니다`, { parse_mode: 'Markdown' });
   });
 
   telegram.on('text', async ctx => {
