@@ -2,15 +2,28 @@ import { NotionAgent } from 'notionapi-agent';
 import * as url from 'url';
 import * as _ from 'lodash';
 import { v4 } from 'uuid';
-import Telegraf from 'telegraf';
+import Telegraf, { TelegramOptions, LaunchPollingOptions, LaunchWebhookOptions } from 'telegraf';
 
-const CONFIGS: any = {};
+interface NotionUtilConfig {
+  token_env: string;
+  telegram_opts: TelegramOptions;
+  launch_opts: {
+    polling?: LaunchPollingOptions,
+    webhook?: LaunchWebhookOptions
+  };
+}
+
+const CONFIGS: {[key: string]: NotionUtilConfig} = {};
+
 CONFIGS['beta'] = {
   token_env: 'TELEGRAM_BETA_TOKEN',
+  telegram_opts: {},
   launch_opts: {}
 };
+
 CONFIGS['bot'] = {
   token_env: 'TELEGRAM_TOKEN',
+  telegram_opts: { webhookReply: false },
   launch_opts: {
     webhook: {
       hookPath: '/secret-path',
@@ -265,7 +278,7 @@ function blockIdToNotionUri(id: string) {
 }
 
 async function main() {
-  const telegram = new Telegraf(process.env[CONFIG.token_env]);
+  const telegram = new Telegraf(process.env[CONFIG.token_env], { telegram: CONFIG.telegram_opts });
 
   telegram.start((ctx) => ctx.reply('Welcome'));
   telegram.help((ctx) => ctx.reply('Send me a sticker'));
@@ -294,7 +307,7 @@ async function main() {
   telegram.on('text', async ctx => {
     const today = await memo(ctx.update.message.text);
     const uri = today.replace(/-/g, '');
-    await ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
+    return ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
   });
 
   await telegram.launch(CONFIG.launch_opts);
