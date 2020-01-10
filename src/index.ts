@@ -107,52 +107,8 @@ async function findCollectionIds(type: string) {
   return [COLLECTION_ID, COLLECTION_VIEW_ID];
 }
 
-async function queryBooks(searchTerm: string) {
-  const [collectionId, collectionViewId] = await findCollectionIds('BOOK');
-
-  console.log(searchTerm);
-
-  console.time('queryCollection');
-  const response = await notion.queryCollection(collectionId, collectionViewId, []);
-  console.timeEnd('queryCollection');
-
-  const { block, collection } = response.data.recordMap;
-  const collections = _.values(collection);
-  const firstCollection = collections[0].value;
-  const schema = firstCollection.schema;
-  const keyByProperty = _.transform(schema, (acc, v, k) => acc[v.name] = k, {});
-  console.log(keyByProperty);
-
-  const blocks = _.values(block);
-  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
-  const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm)).slice(-5);
-  return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
-}
-
-async function queryDrafts(searchTerm: string) {
-  const [collectionId, collectionViewId] = await findCollectionIds('DRAFT');
-
-  console.log(searchTerm);
-
-  console.time('queryCollection');
-  const response = await notion.queryCollection(collectionId, collectionViewId, []);
-  console.timeEnd('queryCollection');
-
-  const { block, collection } = response.data.recordMap;
-  const collections = _.values(collection);
-  const firstCollection = collections[0].value;
-  const schema = firstCollection.schema;
-  const keyByProperty = _.transform(schema, (acc, v, k) => acc[v.name] = k, {});
-  console.log(keyByProperty);
-
-  const blocks = _.values(block);
-  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
-  const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm));
-  return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
-}
-
-async function queryPeople(searchTerm: string) {
-  const [collectionId, collectionViewId] = await findCollectionIds('PRM');
+async function queryCollection(type: string, searchTerm: string) {
+  const [collectionId, collectionViewId] = await findCollectionIds(type);
 
   console.log(searchTerm);
 
@@ -183,6 +139,21 @@ async function updateReadAt(id: string) {
     id,
     table: 'block',
     path: ['properties', 'fz`,'],
+    command: 'set',
+    args: [['‣',[['d',{'type':'date','start_date': todayYYYYMMDD}]]]]
+  }]);
+}
+
+async function updateMetAt(id: string) {
+  const now = new Date();
+  const timezoneShift = new Date(+now + 9 * 60 * 60 * 1000);
+
+  const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
+
+  await notion.submitTransaction([{
+    id,
+    table: 'block',
+    path: ['properties', '87:u'],
     command: 'set',
     args: [['‣',[['d',{'type':'date','start_date': todayYYYYMMDD}]]]]
   }]);
@@ -320,7 +291,7 @@ async function main() {
   telegram.command('book', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
-    const results = await queryBooks(searchTerm);
+    const results = await queryCollection('BOOK', searchTerm);
     if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
 
     return ctx.reply(results.map(r => {
@@ -331,7 +302,7 @@ async function main() {
   telegram.command('read', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
-    const results = await queryBooks(searchTerm);
+    const results = await queryCollection('BOOK', searchTerm);
     if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
     if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
 
@@ -343,7 +314,7 @@ async function main() {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
 
-    const results = await queryDrafts(searchTerm);
+    const results = await queryCollection('DRAFT', searchTerm);
     if (results.length === 0) return ctx.reply('그런 글감 없음: ' + searchTerm);
     return ctx.reply(results.map(r => {
       return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
@@ -354,11 +325,22 @@ async function main() {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
 
-    const results = await queryPeople(searchTerm);
+    const results = await queryCollection('PRM', searchTerm);
     if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
     return ctx.reply(results.map(r => {
       return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
     }).join('\n'), { parse_mode: 'Markdown' });
+  });
+
+  telegram.command('met', async ctx => {
+    const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
+    await ctx.reply('wait a sec');
+    const results = await queryCollection('PRM', searchTerm);
+    if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
+    if (results.length > 1) return ctx.reply('다음 중 누구인가요? ' + results.map(r => r[1]).join(', '));
+
+    await updateMetAt(results[0][0]);
+    await ctx.reply(`${results[0][1]}님과 만난 시간을 업데이트 했습니다`);
   });
 
   telegram.on('text', async ctx => {
