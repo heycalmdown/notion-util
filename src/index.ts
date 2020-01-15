@@ -248,7 +248,7 @@ async function getTodaysId(today: string) {
   console.timeEnd('getDailySeedBed');
 
   const blocks = _.values(block);
-  const pages = blocks.filter(b => b.value.type === 'page');
+  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
   const results = pages.filter(p => p.value.properties.title[0][0] === today);
   if (results[0]) {
     const id = results[0].value.id;
