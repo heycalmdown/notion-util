@@ -188,6 +188,37 @@ async function createNewDay(pageTitle: string) {
   console.log(result);
 }
 
+function pad(value: number) {
+  return value.toString().padStart(2, '0');
+}
+
+function notionStartDate(now: Date) {
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function notionStartTime(now: Date) {
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+function notionNow() {
+  const now = new Date();
+  return [
+    "‣",
+    [
+      [
+        "d",
+        {
+          "type": "datetime",
+          "time_zone": "Asia/Seoul",
+          "start_date": notionStartDate(now),
+          "start_time": notionStartTime(now),
+          "date_format": "relative"
+        }
+      ]
+    ]
+  ];
+}
+
 async function addNewMemo(pageId: string, text: string) {
   const id = v4();
 
@@ -196,7 +227,7 @@ async function addNewMemo(pageId: string, text: string) {
     type: 'text',
     alive: true,
     properties: {
-      title: [[text]]
+      title: [notionNow(), [' ' + text]]
     },
     parent_id: '678bf8f7-dbd6-4f11-86a3-da4aefd61e0a',
     parent_table: 'block',
