@@ -314,6 +314,13 @@ function blockIdToNotionUri(id: string) {
   return NOTION_URL + id.replace(/-/g, '');
 }
 
+function sliceResults(results: string[], ends: number = -20) {
+  return results.slice(ends).map((r, i, sliced) => {
+    if (i === sliced.length - 1) return `... 외 ${results.length - sliced.length}`;
+    return r;
+  });
+}
+
 async function main() {
   const telegram = new Telegraf(process.env[CONFIG.token_env], { telegram: CONFIG.telegram_opts });
 
@@ -325,10 +332,7 @@ async function main() {
     const results = await queryCollection('BOOK', searchTerm);
     if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
 
-    return ctx.reply(results.slice(-20).map((r, i) => {
-      if (i === 19) return `• ... 외 ${results.length - 20}`;
-      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
-    }).join('\n'), { parse_mode: 'Markdown' });
+    return ctx.reply(sliceResults(results.map(r => `• [${r[1]}](${blockIdToNotionUri(r[0])})`)).join('\n'), { parse_mode: 'Markdown' });
   });
 
   telegram.command('read', async ctx => {
@@ -336,7 +340,7 @@ async function main() {
     await ctx.reply('wait a sec');
     const results = await queryCollection('BOOK', searchTerm);
     if (results.length === 0) return ctx.reply('그런책 없음: ' + searchTerm);
-    if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + results.map(r => r[1]).join(', '));
+    if (results.length > 1) return ctx.reply('다음 중 어느 책인가요? ' + sliceResults(results.map(r => r[1])).join(', '));
 
     await updateReadAt(results[0][0]);
     return ctx.reply(`[${results[0][1]}](${blockIdToNotionUri(results[0][0])}) 읽은 시간 업데이트 했습니다`, { parse_mode: 'Markdown' });
@@ -348,9 +352,7 @@ async function main() {
 
     const results = await queryCollection('DRAFT', searchTerm);
     if (results.length === 0) return ctx.reply('그런 글감 없음: ' + searchTerm);
-    return ctx.reply(results.map(r => {
-      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
-    }).join('\n'), { parse_mode: 'Markdown' });
+    return ctx.reply(sliceResults(results.map(r => `• [${r[1]}](${blockIdToNotionUri(r[0])})`)).join('\n'), { parse_mode: 'Markdown' });
   });
 
   telegram.command('people', async ctx => {
@@ -359,9 +361,7 @@ async function main() {
 
     const results = await queryCollection('PRM', searchTerm);
     if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
-    return ctx.reply(results.map(r => {
-      return `• [${r[1]}](${blockIdToNotionUri(r[0])})`;
-    }).join('\n'), { parse_mode: 'Markdown' });
+    return ctx.reply(sliceResults(results.map(r => `• [${r[1]}](${blockIdToNotionUri(r[0])})`)).join('\n'), { parse_mode: 'Markdown' });
   });
 
   telegram.command('met', async ctx => {
@@ -369,7 +369,7 @@ async function main() {
     await ctx.reply('wait a sec');
     const results = await queryCollection('PRM', searchTerm);
     if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
-    if (results.length > 1) return ctx.reply('다음 중 누구인가요? ' + results.map(r => r[1]).join(', '));
+    if (results.length > 1) return ctx.reply('다음 중 누구인가요? ' + sliceResults(results.map(r => r[1])).join(', '));
 
     await updateMetAt(results[0][0]);
     return ctx.reply(`[${results[0][1]}](${blockIdToNotionUri(results[0][0])})님과 만난 시간을 업데이트 했습니다`, { parse_mode: 'Markdown' });
