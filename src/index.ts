@@ -123,7 +123,7 @@ async function queryCollection(type: string, searchTerm: string) {
   const keyByProperty = _.transform(schema, (acc, v, k) => acc[v.name] = k, {});
   console.log(keyByProperty);
 
-  const blocks = _.values(block);
+  const blocks = _.values(block).filter(b => !!b.value);
   const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
   const results = pages.filter(p => p.value.properties.title[0][0].includes(searchTerm));
   return results.map(r => [r.value.id, r.value.properties.title[0][0], JSON.stringify(r.value.properties[keyByProperty['Read at']])]);
@@ -157,6 +157,68 @@ async function updateMetAt(id: string) {
     command: 'set',
     args: [['‣',[['d',{'type':'date','start_date': todayYYYYMMDD}]]]]
   }]);
+}
+
+async function createNewDraft(pageTitle: string, content?: string) {
+  console.log('createNewDraft');
+
+  const draftId = v4();
+
+  const transaction = [{
+    id: draftId,
+    table: 'block',
+    path: [],
+    command: 'set',
+    args: {
+      id: draftId,
+      version: 1,
+      type: 'page',
+      alive: true,
+      properties: {
+        title: [[pageTitle]]
+      },
+      parent_id: '02c93613-79e4-4964-9d28-59dbf5c3e3e8',
+      parent_table: 'collection',
+      created_time: +new Date()
+    } as any
+  }];
+
+  if (content) {
+    const blockId = v4();
+    transaction.push({
+      id: blockId,
+      table: 'block',
+      path: [],
+      command: 'set',
+      args: {
+        id: blockId,
+        type: 'text',
+        alive: true,
+        properties: {
+          title: [notionNow(), [' ' + content]]
+        },
+        parent_id: draftId,
+        parent_table: 'block',
+        created_time: +new Date()
+      } as any
+    }, {
+      id: draftId,
+      table: 'block',
+      path: ['content'],
+      command: 'listAfter',
+      args: { id: blockId } as any
+    }, {
+      id: draftId,
+      table: 'block',
+      path: ['last_edited_time'],
+      command: 'set',
+      args: +new Date()
+    });
+  }
+
+  const result = await notion.submitTransaction(transaction);
+
+  console.log(result);
 }
 
 async function createNewDay(pageTitle: string) {
@@ -316,7 +378,9 @@ function blockIdToNotionUri(id: string) {
 
 function sliceResults(results: string[], ends: number = -20) {
   return results.slice(ends).map((r, i, sliced) => {
-    if (i === sliced.length - 1) return `... 외 ${results.length - sliced.length}`;
+    if (results.length > sliced.length && i === sliced.length - 1) {
+      return `... 외 ${results.length - sliced.length}`;
+    }
     return r;
   });
 }
@@ -353,6 +417,14 @@ async function main() {
     const results = await queryCollection('DRAFT', searchTerm);
     if (results.length === 0) return ctx.reply('그런 글감 없음: ' + searchTerm);
     return ctx.reply(sliceResults(results.map(r => `• [${r[1]}](${blockIdToNotionUri(r[0])})`)).join('\n'), { parse_mode: 'Markdown' });
+  });
+
+  telegram.command('newdraft', async ctx => {
+    const text = ctx.update.message.text;
+    const [, cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)-(.*)/);
+    console.log(cmd, title, content);
+    await createNewDraft(title, content);
+    return ctx.reply('ok');
   });
 
   telegram.command('people', async ctx => {
