@@ -221,35 +221,6 @@ async function createNewDraft(pageTitle: string, content?: string) {
   console.log(result);
 }
 
-async function createNewDay(pageTitle: string) {
-  console.log('createNewDay');
-
-  const id = v4();
-
-  const args = {
-    id,
-    version: 1,
-    type: 'page',
-    alive: true,
-    properties: {
-      title: [[pageTitle]]
-    },
-    parent_id: '54cbdff5-ae05-439f-a3cd-e8513a449238',
-    parent_table: 'collection',
-    created_time: +new Date()
-  };
-
-  const result = await notion.submitTransaction([{
-    id,
-    table: 'block',
-    path: [],
-    command: 'set',
-    args: args as any
-  }]);
-
-  console.log(result);
-}
-
 function pad(value: number) {
   return value.toString().padStart(2, '0');
 }
@@ -281,7 +252,8 @@ function notionNow() {
   ];
 }
 
-async function addNewMemo(pageId: string, text: string) {
+async function memo(text: string) {
+  const SEEDBED_MEMO = '34b815a1-89e7-4fb0-9e24-89d01a62a6d7';
   const id = v4();
 
   const args = {
@@ -291,19 +263,25 @@ async function addNewMemo(pageId: string, text: string) {
     properties: {
       title: [notionNow(), [' ' + text]]
     },
-    parent_id: '678bf8f7-dbd6-4f11-86a3-da4aefd61e0a',
+    parent_id: SEEDBED_MEMO,
     parent_table: 'block',
     created_time: +new Date()
   };
 
-  const result = await notion.submitTransaction([{
+  await notion.submitTransaction([{
     id,
     table: 'block',
     path: [],
     command: 'set',
     args: args as any
   }, {
-    id: pageId,
+    id,
+    table: 'block',
+    path: [],
+    command: 'update',
+    args: { type: 'bulleted_list' } as any
+  }, {
+    id: SEEDBED_MEMO,
     table: 'block',
     path: ['content'],
     command: 'listAfter',
@@ -311,65 +289,14 @@ async function addNewMemo(pageId: string, text: string) {
       id
     } as any
   }, {
-    id: pageId,
+    id: SEEDBED_MEMO,
     table: 'block',
     path: ['last_edited_time'],
     command: 'set',
-    args: +new Date()
+    args: +new Date() as any
   }]);
 
-  console.log(result);
-}
-
-async function getDailySeedBed() {
-  const [collectionId, collectionViewId] = await findCollectionIds('NOTE');
-  console.time('queryCollection');
-  const response = await notion.queryCollection(collectionId, collectionViewId, []);
-  console.timeEnd('queryCollection');
-
-  const { block } = response.data.recordMap;
-  return block;
-}
-
-const dailyIds = {};
-
-async function getTodaysId(today: string) {
-  if (dailyIds[today]) return dailyIds[today];
-
-  console.time('getDailySeedBed');
-  const block = await getDailySeedBed();
-  console.timeEnd('getDailySeedBed');
-
-  const blocks = _.values(block);
-  const pages = blocks.filter(b => b.value.type === 'page' && !!b.value.properties);
-  const results = pages.filter(p => p.value.properties.title[0][0] === today);
-  if (results[0]) {
-    const id = results[0].value.id;
-    dailyIds[today] = id;
-    return id;
-  }
-}
-
-async function ensureTodaysId() {
-  const now = new Date();
-  const timezoneShift = new Date(+now + 9 * 60 * 60 * 1000);
-
-  const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
-
-  const id = await getTodaysId(todayYYYYMMDD);
-  if (id) return id;
-
-  await createNewDay(todayYYYYMMDD);
-
-  return getTodaysId(todayYYYYMMDD);
-}
-
-async function memo(text: string) {
-  const todaysId = await ensureTodaysId();
-  console.time('addNewMemo');
-  await addNewMemo(todaysId, text);
-  console.timeEnd('addNewMemo');
-  return todaysId;
+  return SEEDBED_MEMO;
 }
 
 function blockIdToNotionUri(id: string) {
@@ -448,9 +375,9 @@ async function main() {
   });
 
   telegram.on('text', async ctx => {
-    const today = await memo(ctx.update.message.text);
-    const uri = today.replace(/-/g, '');
-    return ctx.reply(`[일일 메모](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
+    const blockId = await memo(ctx.update.message.text);
+    const uri = blockId.replace(/-/g, '');
+    return ctx.reply(`[Seed Bed/Memo](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
   });
 
   await telegram.launch(CONFIG.launch_opts);
