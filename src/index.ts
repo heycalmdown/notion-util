@@ -1,5 +1,5 @@
 import Telegraf, { TelegramOptions, LaunchPollingOptions, LaunchWebhookOptions, Middleware, ContextMessageUpdate } from 'telegraf';
-import { COMMANDS, onText, onStart } from './handlers';
+import { COMMANDS, onText, onStart, errorCatcher } from './handlers';
 
 interface NotionUtilConfig {
   token_env: string;
@@ -35,8 +35,8 @@ async function main() {
   const telegram = new Telegraf(process.env[CONFIG.token_env], { telegram: CONFIG.telegram_opts });
 
   telegram.start(onStart);
-  COMMANDS.forEach(c => telegram.command(c[0], c[1]));
-  telegram.on('text', onText);
+  COMMANDS.forEach(c => telegram.command(c[0], errorCatcher(c[1])));
+  telegram.on('text', errorCatcher(onText));
 
   await telegram.launch(CONFIG.launch_opts);
 }
