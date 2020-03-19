@@ -1,5 +1,5 @@
 
-import { NotionAgent } from 'notionapi-agent';
+import { NotionAgent, DocumentOperation, SubmitTransactionReturns } from 'notionapi-agent';
 import * as url from 'url';
 import * as _ from 'lodash';
 import { v4 } from 'uuid';
@@ -55,6 +55,14 @@ function getPageIDFromNotionPageURL(str: string) {
   }
 }
 
+async function submitTransaction(operations: DocumentOperation[]): Promise<SubmitTransactionReturns> {
+  const result = await notion.submitTransaction(operations);
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+  return result;
+}
+
 const NOTION_URL = 'https://www.notion.so/kekefam/';
 
 const URIS = {
@@ -74,14 +82,13 @@ async function findCollectionIds(type: string) {
 
   const COLLECTION_ID = _.keys(page.data.recordMap.collection)[0];
   const COLLECTION_VIEW_ID = _.keys(page.data.recordMap.collection_view)[0];
+  if (!COLLECTION_ID || !COLLECTION_VIEW_ID) throw new Error('no collection id');
   CACHE[type] = { COLLECTION_ID, COLLECTION_VIEW_ID };
   return [COLLECTION_ID, COLLECTION_VIEW_ID];
 }
 
 async function queryCollection(type: string, searchTerm: string) {
   const [collectionId, collectionViewId] = await findCollectionIds(type);
-
-  console.log(searchTerm);
 
   console.time('queryCollection');
   const response = await notion.queryCollection(collectionId, collectionViewId, []);
@@ -106,7 +113,7 @@ async function updateReadAt(id: string) {
 
   const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
 
-  await notion.submitTransaction([{
+  await submitTransaction([{
     id,
     table: 'block',
     path: ['properties', 'fz`,'],
@@ -121,7 +128,7 @@ async function updateMetAt(id: string) {
 
   const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
 
-  await notion.submitTransaction([{
+  await submitTransaction([{
     id,
     table: 'block',
     path: ['properties', '87:u'],
@@ -187,9 +194,10 @@ async function createNewDraft(pageTitle: string, content?: string) {
     });
   }
 
-  const result = await notion.submitTransaction(transaction);
+  const result = await submitTransaction(transaction);
 
   console.log(result);
+  return draftId;
 }
 
 function pad(value: number) {
@@ -239,7 +247,7 @@ async function memo(text: string) {
     created_time: +new Date()
   };
 
-  await notion.submitTransaction([{
+  await submitTransaction([{
     id,
     table: 'block',
     path: [],
@@ -283,6 +291,21 @@ function sliceResults(results: string[], ends: number = -20) {
   });
 }
 
+export function errorCatcher(middleware: Middleware<ContextMessageUpdate>): Middleware<ContextMessageUpdate> {
+  return async function (ctx: ContextMessageUpdate) {
+    try {
+      return await middleware(ctx);
+    } catch (e) {
+      await ctx.reply(e.message);
+    }
+  }
+}
+
+function idToNotionUri(id: string) {
+  const uri = id.replace(/-/g, '');
+  return NOTION_URL + uri;
+}
+
 export const COMMANDS: [string, Middleware<ContextMessageUpdate>][] = [
   ['book', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
@@ -312,10 +335,9 @@ export const COMMANDS: [string, Middleware<ContextMessageUpdate>][] = [
   }],
   ['newdraft', async ctx => {
     const text = ctx.update.message.text;
-    const [, cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)-(.*)/);
-    console.log(cmd, title, content);
-    await createNewDraft(title, content);
-    return ctx.reply('ok');
+    const [, _cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)[ ]?-[ ]?(.*)/);
+    const draftId = await createNewDraft(title.trim(), content);
+    return ctx.reply(`[${title.trim()}](${idToNotionUri(draftId)}) 문서를 만들었습니다`, { parse_mode: 'Markdown' });
   }], ['people', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
@@ -337,8 +359,7 @@ export const COMMANDS: [string, Middleware<ContextMessageUpdate>][] = [
 
 export async function onText(ctx: ContextMessageUpdate) {
     const blockId = await memo(ctx.update.message.text);
-    const uri = blockId.replace(/-/g, '');
-    return ctx.reply(`[Seed Bed/Memo](${NOTION_URL + uri})에 추가했습니다`, { parse_mode: 'Markdown' });
+    return ctx.reply(`[Seed Bed/Memo](${idToNotionUri(blockId)})에 추가했습니다`, { parse_mode: 'Markdown' });
 }
 
 export async function onStart(ctx: ContextMessageUpdate) {
