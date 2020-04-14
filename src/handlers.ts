@@ -72,13 +72,17 @@ const URIS = {
   PRM: NOTION_URL + '6a3eb7d328bc4e328a9babb598d44d0e?v=6415bd5b087143808dcc7d16a96710ee'
 };
 
-const CACHE: {[key: string]: { COLLECTION_ID: string; COLLECTION_VIEW_ID: string }} = {};
+const CACHE: {[key: string]: { COLLECTION_ID: string; COLLECTION_VIEW_ID: string }} = {
+  DRAFT: { COLLECTION_ID: '02c93613-79e4-4964-9d28-59dbf5c3e3e8', COLLECTION_VIEW_ID: '4d82e586-6a4c-426f-a788-b1b72b46dff6' },
+  BOOK: { COLLECTION_ID: 'e6503e49-274b-468d-9038-681263f9b659', COLLECTION_VIEW_ID: '59575ce5-af82-4944-a6bc-7bd95a14704e' }
+};
 
 async function findCollectionIds(type: string) {
   if (CACHE[type]) return [CACHE[type].COLLECTION_ID, CACHE[type].COLLECTION_VIEW_ID];
   const tempUrl = URIS[type];
   const id = getPageIDFromNotionPageURL(tempUrl);
   const page = await notion.loadPageChunk(id)
+  console.log(page);
 
   const COLLECTION_ID = _.keys(page.data.recordMap.collection)[0];
   const COLLECTION_VIEW_ID = _.keys(page.data.recordMap.collection_view)[0];
@@ -137,9 +141,7 @@ async function updateMetAt(id: string) {
   }]);
 }
 
-async function createNewDraft(pageTitle: string, content?: string) {
-  console.log('createNewDraft');
-
+async function createNewPage(collectionId: string, pageTitle: string, content?: string) {
   const draftId = v4();
 
   const transaction = [{
@@ -155,7 +157,7 @@ async function createNewDraft(pageTitle: string, content?: string) {
       properties: {
         title: [[pageTitle]]
       },
-      parent_id: '02c93613-79e4-4964-9d28-59dbf5c3e3e8',
+      parent_id: collectionId,
       parent_table: 'collection',
       created_time: +new Date()
     } as any
@@ -198,6 +200,24 @@ async function createNewDraft(pageTitle: string, content?: string) {
 
   console.log(result);
   return draftId;
+}
+
+async function createNewDraft(pageTitle: string, content?: string) {
+  console.log('createNewDraft');
+
+  const [collectionId] = await findCollectionIds('DRAFT');
+
+  return await createNewPage(collectionId, pageTitle, content);
+}
+
+async function createNewBook(pageTitle: string, content?: string) {
+  console.log('createNewBook');
+
+  const [collectionId] = await findCollectionIds('BOOK');
+
+  const bookId = await createNewPage(collectionId, pageTitle, content);
+  await updateReadAt(bookId);
+  return bookId;
 }
 
 function pad(value: number) {
@@ -296,7 +316,7 @@ export function errorCatcher(middleware: Middleware<ContextMessageUpdate>): Midd
     try {
       return await middleware(ctx);
     } catch (e) {
-      await ctx.reply(e.message);
+      await ctx.reply('Error: ' + e.message);
     }
   }
 }
@@ -335,17 +355,25 @@ export const COMMANDS: [string, Middleware<ContextMessageUpdate>][] = [
   }],
   ['newdraft', async ctx => {
     const text = ctx.update.message.text;
-    const [, _cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)[ ]?-[ ]?(.*)/);
+    const [, _cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)[ ]?-?[ ]?(.*)/);
     const draftId = await createNewDraft(title.trim(), content);
     return ctx.reply(`[${title.trim()}](${idToNotionUri(draftId)}) 문서를 만들었습니다`, { parse_mode: 'Markdown' });
-  }], ['people', async ctx => {
+  }],
+  ['newbook', async ctx => {
+    const text = ctx.update.message.text;
+    const [, _cmd, title, content] = text.match(/\/([^ ]+) ([^-]+)[ ]?-?[ ]?(.*)/);
+    const draftId = await createNewBook(title.trim(), content);
+    return ctx.reply(`[${title.trim()}](${idToNotionUri(draftId)}) 책을 추가했습니다`, { parse_mode: 'Markdown' });
+  }],
+  ['people', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
 
     const results = await queryCollection('PRM', searchTerm);
     if (results.length === 0) return ctx.reply('그런 사람 없음: ' + searchTerm);
     return ctx.reply(sliceResults(results.map(r => `• [${r[1]}](${blockIdToNotionUri(r[0])})`)).join('\n'), { parse_mode: 'Markdown' });
-  }], ['met', async ctx => {
+  }],
+  ['met', async ctx => {
     const searchTerm = ctx.update.message.text.split(' ').slice(1).join(' ');
     await ctx.reply('wait a sec');
     const results = await queryCollection('PRM', searchTerm);
