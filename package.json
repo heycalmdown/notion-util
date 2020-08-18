@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/heycalmdown/notion-util#readme",
   "devDependencies": {
-    "@types/lodash": "4.14.149",
+    "@types/lodash": "4.14.159",
     "@types/node": "13.1.1",
     "@types/uuid": "3.4.6",
     "tslint": "5.20.1",
