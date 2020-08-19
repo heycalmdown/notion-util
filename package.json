@@ -23,7 +23,7 @@
     "@types/node": "13.13.15",
     "@types/uuid": "3.4.9",
     "tslint": "5.20.1",
-    "typescript": "3.7.4"
+    "typescript": "3.9.7"
   },
   "dependencies": {
     "lodash": "^4.17.19",
