@@ -113,9 +113,7 @@ async function queryCollection(type: string, searchTerm: string) {
 
 async function updateReadAt(id: string) {
   const now = new Date();
-  const timezoneShift = new Date(+now + 9 * 60 * 60 * 1000);
-
-  const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
+  const todayYYYYMMDD = now.toISOString().split('T')[0];
 
   await submitTransaction([{
     id,
@@ -128,9 +126,7 @@ async function updateReadAt(id: string) {
 
 async function updateMetAt(id: string) {
   const now = new Date();
-  const timezoneShift = new Date(+now + 9 * 60 * 60 * 1000);
-
-  const todayYYYYMMDD = timezoneShift.toISOString().split('T')[0];
+  const todayYYYYMMDD = now.toISOString().split('T')[0];
 
   await submitTransaction([{
     id,
