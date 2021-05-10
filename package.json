@@ -26,7 +26,7 @@
     "typescript": "4.2.3"
   },
   "dependencies": {
-    "lodash": "^4.17.19",
+    "lodash": "^4.17.21",
     "notionapi-agent": "^0.7.2",
     "telegraf": "^3.35.0",
     "uuid": "^8.0.0"
