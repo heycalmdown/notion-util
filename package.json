@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "lodash": "^4.17.19",
-    "notionapi-agent": "^0.7.2",
+    "notionapi-agent": "^2.0.0",
     "telegraf": "^3.35.0",
     "uuid": "^8.0.0"
   }
